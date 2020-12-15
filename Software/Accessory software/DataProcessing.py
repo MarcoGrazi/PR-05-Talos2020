@@ -1,10 +1,8 @@
 import os
 import csv
-import shutil as sh
+import natsort
 from PIL import Image
-import math
-import numpy as np
-import pandas as pd
+
 
 '''
 the objective of this script is to take the data from each Data folder and concatenate it into
@@ -71,8 +69,9 @@ for folder in os.listdir('C:/Users/Prometeo/Desktop/Marco/PrometheanRobotics/Rob
             for i in range(length-selength):
                 senwriter.writerow([0, 0, 0, 0, 0, 0, 0, 0])
 
-
-        for image in os.listdir(basename):
+        Images = os.listdir(basename)
+        Images = natsort.natsorted(Images)
+        for image in Images:
             if 'image' in image:
                 im = Image.open(basename+"/"+image)
                 im.save('C:/Users/Prometeo/Desktop/Marco/PrometheanRobotics/Robots'

@@ -1,4 +1,4 @@
-import tensorflow
+import tensorflow as tf
 import pandas as pd
 import keras
 import time
@@ -127,4 +127,9 @@ if save:
     for file in os.listdir(MODEL_DIR):
         if 'model' in file:
             cont+=1
+    converter = tf.lite.TFLiteConverter.from_keras_model(model)
+    converter.optimizations = [tf.lite.Optimize.OPTIMIZE_FOR_LATENCY]
+    converter.target_spec.supported_types = [tf.float16]
+    model = converter.convert()
     model.save(MODEL_DIR+'model'+str(cont))
+
