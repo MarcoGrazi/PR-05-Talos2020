@@ -100,11 +100,11 @@ class CAM:
             controlwriter = csv.writer(control, delimiter=',',
                                     quotechar='"', quoting=csv.QUOTE_MINIMAL)
             controlwriter.writerow([CONTROLS.A, CONTROLS.B, CONTROLS.X, CONTROLS.Y,
-                                    CONTROLS.STICKDX[0]/32768, CONTROLS.STICKDX[1]/32768,
-                                    CONTROLS.STICKSX[0]/32768, CONTROLS.STICKSX[1]/32768,
+                                    CONTROLS.STICKDX[0], CONTROLS.STICKDX[1],
+                                    CONTROLS.STICKSX[0], CONTROLS.STICKSX[1],
                                     CONTROLS.CROSS[0], CONTROLS.CROSS[1], CONTROLS.SBUTTONDX,
-                                    CONTROLS.SBUTTONSX, CONTROLS.RB, CONTROLS.LB, CONTROLS.RT/255,
-                                    CONTROLS.LT/255])
+                                    CONTROLS.SBUTTONSX, CONTROLS.RB, CONTROLS.LB, CONTROLS.RT,
+                                    CONTROLS.LT])
         with open('/home/pi/Desktop/ANIMA/Data/Status.csv', 'a') as status:
             statuswriter = csv.writer(status, delimiter=',',
                                     quotechar='"', quoting=csv.QUOTE_MINIMAL)
@@ -229,16 +229,16 @@ class USENSOR:
 class CONTROLS:
     gamepad = InputDevice('/dev/input/event0')
     MODE = "rc"
-    RT = 0            # 0 -> 255
-    LT = 0            # 0 -> 255
+    RT = 0            # 0 -> 255 -> 0 to 1
+    LT = 0            # 0 -> 255 -> 0 to 1
     RB = 0
     LB = 0
     SBUTTONSX = 0
     SBUTTONDX = 0
     STICKDX = [0, 0]  # [y, x] up-32768, center -1, down 32767,
-                      # left-32767, center 0, right 32767
+                      # left-32767, center 0, right 32767 -> -1 to 1
     STICKSX = [0, 0]  # [y, x] up-32768, center -1, down 32767,
-                      # left-32767, center 0, right 32767
+                      # left-32767, center 0, right 32767 -1 to 1
     CROSS = [0, 0]    # [y, x] up-1, down 1, left-1, right 1
     A = 0
     B = 0
@@ -280,7 +280,7 @@ class CONTROLS:
                         elif self.MODE == 'auto':
                             self.MODE = 'rc'
                 elif event.code == self.sticksx[1] and fssx:
-                    self.STICKSX[1] = event.value
+                    self.STICKSX[1] = event.value/32768
                     fssx=0
                 elif event.code == self.x:
                     self.X = event.value
@@ -297,19 +297,19 @@ class CONTROLS:
                 elif event.code == self.sbuttonsx:
                     self.SBUTTONSX = event.value
                 elif event.code == self.lt:
-                    self.LT = event.value
+                    self.LT = event.value/255
                 elif event.code == self.rt:
-                    self.RT = event.value
+                    self.RT = event.value/255
                 elif event.code == self.rb:
                     self.RB = event.value
                 elif event.code == self.lb:
                     self.LB = event.value
                 elif event.code == self.stickdx[0]:
-                    self.STICKDX[0] = event.value+1
+                    self.STICKDX[0] = (event.value+1)/32768
                 elif event.code == self.stickdx[1]:
-                    self.STICKDX[1] = event.value
+                    self.STICKDX[1] = event.value/32768
                 elif event.code == self.sticksx[0]:
-                    self.STICKSX[0] = event.value+1
+                    self.STICKSX[0] = (event.value+1)/32768
                 
             
                 
@@ -368,8 +368,8 @@ class LEGS:
         self. servopos[1] += CONTROLS.CROSS[0]
         self.servopos[2] += CONTROLS.CROSS[1]
         self.servopos[3] += CONTROLS.CROSS[1]
-        self.motorthrottle[0] = CONTROLS.RT / (255 * 1.5)
-        self.motorthrottle[1] = CONTROLS.LT / (255 *1.5)
+        self.motorthrottle[0] = CONTROLS.RT / 1.5
+        self.motorthrottle[1] = CONTROLS.LT / 1.5
         self.SERVOADX.angle = self.servopos[0]
         self.SERVOASX.angle = self.servopos[1]
         self.SERVOPDX.angle = self.servopos[2]
@@ -406,7 +406,7 @@ class ARM():
 
     def Update_Arm_Position(self):
         if self.servopos[0] > 10 and self.servopos[0] < 170:
-            self.servopos[0] -= CONTROLS.STICKSX[1]/16384
+            self.servopos[0] -= CONTROLS.STICKSX[1]*2
         else:
             if self.servopos[0] > 90:
                 self.servopos[0] = 169
@@ -414,7 +414,7 @@ class ARM():
                 self.servopos[0] = 11
 
         if self.servopos[1] > 10 and self.servopos[1]< 150:
-            self.servopos[1] += CONTROLS.STICKSX[0]/16384
+            self.servopos[1] += CONTROLS.STICKSX[0]*2
         else:
             if self.servopos[1] > 90:
                 self.servopos[1] = 149
@@ -425,7 +425,7 @@ class ARM():
         #beyond 110 degrees forward, so that the grabber moves parallel to the ground
         #and at a certain height
         if self.servopos[1] > 110:
-            self.servopos[2] += CONTROLS.STICKSX[0]/16384
+            self.servopos[2] += CONTROLS.STICKSX[0]*2
         elif self.servopos[2]>=1:
             self.servopos[2]-=1
             
@@ -461,7 +461,7 @@ class AI():
             MPU.UpdateData()
             GPS.GPS_Update()
             Sensors = np.array(np.concatenate((MPU.GYRO, MPU.ACCEL, GPS.CURRENT_COORDINATES)))
-            image = np.array(CAM.Shoot('ai')).resize((512, 384, 3))
+            image = np.array(CAM.Shoot('ai')).resize((256, 192, 3))
             self.SLIDING_WINDOW.append([image, Sensors])
 
     def AIupdate(self):
@@ -471,20 +471,38 @@ class AI():
         # we remove the first element of SLIDING_WINDOW and we introduce the new input
         # at the back of the list. We implemented a 16 blocks FIFO buffer
         self.SLIDING_WINDOW.pop(0)
-        Sensors = np.array(np.concatenate((MPU.GYRO, MPU.ACCEL, GPS.CURRENT_COORDINATES)))
+        Sensors = np.array(np.concatenate((MPU.GYRO, MPU.ACCEL, GPS.CURRENT_COORDINATES), axis=-1))
         image = np.array(CAM.Shoot('ai')).resize((512, 384, 3))
         self.SLIDING_WINDOW.append([image, Sensors])
 
         # inference part
-        input = np.array(self.SLIDING_WINDOW)
         input_details = self.model.get_input_details()
         output_details = self.model.get_output_details()
-        self.model.set_tensor(input_details[0]['index'], input)
+        input_1 = np.array(self.SLIDING_WINDOW[0], dtype=np.float32)
+        input_2 = np.array(self.SLIDING_WINDOW[1], dtype=np.float32)
+        self.model.set_tensor(input_details[0]['index'], input_1)
+        self.model.set_tensor(input_details[1]['index'], input_2)
         self.model.invoke()
-        output = self.model.get_tensor(output_details[0]['index'])
-        print(output)
+        output = self.model.get_tensor(output_details[0]['index'])[0][15]
 
-        # TODO: translation from model output to CONTROLS commands
+        # translation from model output to CONTROL commands
+        CONTROLS.A = output[0]
+        CONTROLS.B = output[1]
+        CONTROLS.X = output[2]
+        CONTROLS.Y = output[3]
+        CONTROLS.STICKDX[0] = output[4]
+        CONTROLS.STICKDX[1] = output[5]
+        CONTROLS.STICKSX[0] = output[6]
+        CONTROLS.STICKSX[1] = output[7]
+        CONTROLS.CROSS[0] = output[8]
+        CONTROLS.CROSS[1] = output[9]
+        CONTROLS.SBUTTONDX = output[10]
+        CONTROLS.SBUTTONSX = output[11]
+        CONTROLS.RB = output[12]
+        CONTROLS.LB = output[13]
+        CONTROLS.RT = output[14]
+        CONTROLS.LT = output[15]
+
 
         
 # when in REC mode shis extra process is needed. Sensors data update delay is not
@@ -503,9 +521,9 @@ def SENProcess(CONsignal):
             with open('/home/pi/Desktop/ANIMA/Data/Sensors.csv', 'a') as sensors:
                 sensorswriter = csv.writer(sensors, delimiter=',',
                                         quotechar='"', quoting=csv.QUOTE_MINIMAL)
-                sensorswriter.writerow([MPU.GYRO[0],MPU.GYRO[1],MPU.GYRO[2],
-                                        MPU.ACCEL[0],MPU.ACCEL[1],MPU.ACCEL[2],
-                                        GPS.CURRENT_COORDINATES[0],GPS.CURRENT_COORDINATES[1]])
+                sensorswriter.writerow([MPU.GYRO[0], MPU.GYRO[1], MPU.GYRO[2],
+                                        MPU.ACCEL[0], MPU.ACCEL[1], MPU.ACCEL[2],
+                                        GPS.CURRENT_COORDINATES[0], GPS.CURRENT_COORDINATES[1]])
                 
         
 def RECProcess(SYNCTIME):
@@ -522,6 +540,7 @@ def cleanup():
     SEN.terminate()
     SEN.join()
     print("exit procedure done")
+
 
 try:
     SYNCTIME = time.time()

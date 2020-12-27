@@ -55,7 +55,7 @@ for folder in os.listdir('C:/Users/Prometeo/Desktop/Marco/PrometheanRobotics/Rob
             conwriter = csv.writer(c, delimiter=',',
                                        quotechar='"', quoting=csv.QUOTE_MINIMAL)
             for i in range(length-clength):
-                conwriter.writerow([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+                conwriter.writerow([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
 
         with open(basename + '/Status.csv', 'a', newline='') as st:
             statwriter = csv.writer(st, delimiter=',',
@@ -86,7 +86,7 @@ for folder in os.listdir('C:/Users/Prometeo/Desktop/Marco/PrometheanRobotics/Rob
                 con = csv.reader(c)
                 for row in con:
                     controlwriter.writerow([row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7],
-                                            row[8], row[9], row[10], row[11], row[12], row[13]])
+                                            row[8], row[9], row[10], row[11], row[12], row[13], row[14], row[15]])
                     gpc += 1
 
         with open('C:/Users/Prometeo/Desktop/Marco/PrometheanRobotics/Robots'
