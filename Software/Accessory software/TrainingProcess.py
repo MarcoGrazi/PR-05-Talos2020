@@ -81,38 +81,6 @@ class CustomGenerator(keras.utils.Sequence):
         XI = XI.reshape((1, self.batchsize, self.targetsize[0], self.targetsize[1], 3))
         return [np.array(XI), np.array(X)], np.array(Y)
 
-def ActiveRatio(y_true, y_pred):
-    zero = tf.constant(0, dtype=tf.float32)
-    y_true = tf.reshape(y_true, (1, 16, 16))
-    logic_t = tf.not_equal(y_true, zero)
-    temp_t = tf.where(logic_t, 1.0, 0.0)
-    right = tf.multiply(y_pred, y_true)
-    logic_bm = tf.not_equal(right, zero)
-    right = tf.where(logic_bm, 1.0, 0.0)
-    right = tf.reduce_sum(right)
-    total = tf.reduce_sum(temp_t)
-    if total == 0:
-        if right == 0:
-            return 1.0
-        else:
-            return 0.0
-    else:
-        return right/total
-
-def LCHCrossentropy(y_true, y_pred):
-    zero = tf.constant(0, dtype=tf.float32)
-    y_true = tf.reshape(y_true, (16, 16, 1))
-    y_pred = tf.reshape(y_pred, (16, 16, 1))
-    logic_t = tf.not_equal(y_true, zero)
-    T = tf.where(logic_t, 1.0, 0.0)
-    Anti_T = tf.where(logic_t, 0.0, 1.0)
-    BC = keras.losses.BinaryCrossentropy()
-    LCH = keras.losses.LogCosh()
-    loss1 = BC(T, y_pred)
-    loss2 = LCH(y_true, y_pred)
-    loss = loss1*0.5 + loss2*1
-    return loss
-
 
 TrainGen = CustomGenerator(controlsfile=TRAIN_DIR + 'Controls.csv', statusfile=TRAIN_DIR + 'Status.csv',
                            sensorsfile=TRAIN_DIR + 'Sensors.csv', imagedir=TRAIN_DIR, batchsize=SEQUENCE_LENGTH,
@@ -134,21 +102,21 @@ Z = keras.layers.TimeDistributed(keras.layers.Dropout(0.4))(Z)
 Z = keras.layers.TimeDistributed(keras.layers.Flatten())(Z)
 input2 = keras.layers.Input(shape=[SEQUENCE_LENGTH, 19])
 Z = keras.layers.Concatenate(axis=2)([Z, input2])
-Z = keras.layers.TimeDistributed(keras.layers.Dense(100, 'relu'))(Z)
+Z = keras.layers.TimeDistributed(keras.layers.Dense(30, 'relu'))(Z)
 Z = keras.layers.TimeDistributed(keras.layers.Dropout(0.2))(Z)
-Z = keras.layers.SimpleRNN(100, 'relu', return_sequences=True)(Z)
-output = keras.layers.TimeDistributed(keras.layers.Dense(16, 'linear'))(Z)
+Z = keras.layers.SimpleRNN(30, 'relu', return_sequences=True)(Z)
+output = keras.layers.TimeDistributed(keras.layers.Dense(16, 'tanh'))(Z)
 
 
 model = keras.Model(inputs=[input1, input2], outputs=[output])
-model.compile(optimizer="Nadam", loss=LCHCrossentropy, metrics=['mse', 'mae', 'accuracy', ActiveRatio])
+model.compile(optimizer="Nadam", loss='mse', metrics=['mse', 'mae'])
 
 print(model.summary())
 train = int(input('train?'))
 if train:
     history = model.fit(TrainGen, epochs=1, batch_size=1,
               callbacks=[keras.callbacks.ReduceLROnPlateau(patience=1, factor=0.2, monitor="loss"),
-                                               keras.callbacks.EarlyStopping(patience=3, monitor="loss")])
+                                               keras.callbacks.EarlyStopping(patience=5, monitor="loss")])
 
     pd.DataFrame(history.history).plot(figsize=(12, 7))
     plt.grid(True)
@@ -158,8 +126,7 @@ if train:
     if save:
         model.save(MODEL_DIR + 'TrainedModel')
 
-model = keras.models.load_model(MODEL_DIR + 'TrainedModel', custom_objects={'LCHCrossentropy': LCHCrossentropy,
-                                                                            'ActiveRatio': ActiveRatio})
+model = keras.models.load_model(MODEL_DIR + 'TrainedModel')
 
 Test1Gen = CustomGenerator(controlsfile=TEST1_DIR + 'Controls.csv', statusfile=TEST1_DIR + 'Status.csv',
                           sensorsfile=TEST1_DIR + 'Sensors.csv', imagedir=TEST1_DIR, batchsize=SEQUENCE_LENGTH,
