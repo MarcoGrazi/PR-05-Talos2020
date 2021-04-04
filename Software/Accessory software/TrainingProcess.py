@@ -7,16 +7,6 @@ import os
 import matplotlib.pyplot as plt
 from PIL import Image
 
-'''
-this script is the one I used to try different configurations of the Neural Network 
-which will tdrive the Talos2020 robot in autonomous mode. The main structure of the network
-was blandly inspired by the paper "Neural circuit policies enabling auditable autonomy" published by 
-Nature Machine Intelligence. With a Dataset of more than 38000 images and associated data (collected by 
-driving the robot in REC mode), the results were not good enough. Still needs research, maybe trying a two network 
-(one to classify the right command and one to calculate the right value for that command) approach would reap
-better results  
-'''
-
 
 TRAIN_DIR = 'C:/Users/Prometeo/Desktop/Marco/PrometheanRobotics/Robots' \
               '/Talos 2020/Software/Dataset/Train/'
@@ -25,7 +15,7 @@ TEST1_DIR = 'C:/Users/Prometeo/Desktop/Marco/PrometheanRobotics/Robots' \
 TEST2_DIR = 'C:/Users/Prometeo/Desktop/Marco/PrometheanRobotics/Robots' \
             '/Talos 2020/Software/Dataset/Test2/'
 MODEL_DIR = 'C:/Users/Prometeo/Desktop/Marco/PrometheanRobotics/Robots/Talos 2020/Software/ANIMA/AI Models/'
-SEQUENCE_LENGTH = 16
+SEQUENCE_LENGTH = 32
 
 
 class CustomGenerator(keras.utils.Sequence):
@@ -58,17 +48,9 @@ class CustomGenerator(keras.utils.Sequence):
 
     def Generator(self, samples, item):
         y = np.array(pd.read_csv(self.controlsfile, quotechar='"', header=None))
-        xst = np.array(pd.read_csv(self.statusfile, quotechar='"', header=None))
-        xsn = np.array(pd.read_csv(self.sensorsfile, quotechar='"', header=None))
-        X = []
-        if (item-1) <= 0:
-            item += 1
-        for i in range((item-1)*self.batchsize, item*self.batchsize):
-            X.append(np.concatenate((xsn[i], xst[i]), axis=-1))
-        X = np.array(X)
-        X = X.reshape(1, self.batchsize, 19)
+        y = y[:, 14:]
         Y = y[(item-1)*self.batchsize: item * self.batchsize]
-        Y = Y.reshape(1, self.batchsize, 16)
+        Y = Y.reshape(1, self.batchsize, 2)
         xi = []
         for file in samples:
             im = Image.open(os.path.join(self.imagedir, file))
@@ -79,7 +61,7 @@ class CustomGenerator(keras.utils.Sequence):
             xi.append(im)
         XI = np.array(xi)
         XI = XI.reshape((1, self.batchsize, self.targetsize[0], self.targetsize[1], 3))
-        return [np.array(XI), np.array(X)], np.array(Y)
+        return np.array(XI), np.array(Y)
 
 
 TrainGen = CustomGenerator(controlsfile=TRAIN_DIR + 'Controls.csv', statusfile=TRAIN_DIR + 'Status.csv',
@@ -89,34 +71,28 @@ TrainGen = CustomGenerator(controlsfile=TRAIN_DIR + 'Controls.csv', statusfile=T
 
 input1 = keras.layers.Input(shape=[SEQUENCE_LENGTH, 256, 192, 3])
 Z = keras.layers.TimeDistributed(
-    keras.layers.Conv2D(64, 5, strides=2, padding='same', activation='relu'))(input1)
-Z = keras.layers.TimeDistributed(keras.layers.MaxPool2D(4))(Z)
-Z = keras.layers.TimeDistributed(keras.layers.Conv2D(32, 5, padding='same', activation='relu'))(Z)
+    keras.layers.Conv2D(32, 5, strides=2, padding='same', activation='relu'))(input1)
 Z = keras.layers.TimeDistributed(keras.layers.MaxPool2D(2))(Z)
-Z = keras.layers.TimeDistributed(keras.layers.BatchNormalization())(Z)
-Z = keras.layers.TimeDistributed(keras.layers.Dropout(0.4))(Z)
-Z = keras.layers.TimeDistributed(keras.layers.Conv2D(32, 3, padding='same', activation='relu'))(Z)
+Z = keras.layers.TimeDistributed(keras.layers.Conv2D(16, 5, padding='same', activation='relu'))(Z)
 Z = keras.layers.TimeDistributed(keras.layers.MaxPool2D(2))(Z)
 Z = keras.layers.TimeDistributed(keras.layers.BatchNormalization())(Z)
 Z = keras.layers.TimeDistributed(keras.layers.Dropout(0.4))(Z)
 Z = keras.layers.TimeDistributed(keras.layers.Flatten())(Z)
-input2 = keras.layers.Input(shape=[SEQUENCE_LENGTH, 19])
-Z = keras.layers.Concatenate(axis=2)([Z, input2])
-Z = keras.layers.TimeDistributed(keras.layers.Dense(30, 'relu'))(Z)
+Z = keras.layers.TimeDistributed(keras.layers.Dense(20, 'relu'))(Z)
 Z = keras.layers.TimeDistributed(keras.layers.Dropout(0.2))(Z)
-Z = keras.layers.SimpleRNN(30, 'relu', return_sequences=True)(Z)
-output = keras.layers.TimeDistributed(keras.layers.Dense(16, 'tanh'))(Z)
+Z = keras.layers.SimpleRNN(15, 'relu', return_sequences=True)(Z)
+output = keras.layers.TimeDistributed(keras.layers.Dense(2, 'sigmoid'))(Z)
 
 
-model = keras.Model(inputs=[input1, input2], outputs=[output])
-model.compile(optimizer="Nadam", loss='mse', metrics=['mse', 'mae'])
+model = keras.Model(inputs=[input1], outputs=[output])
+model.compile(optimizer=keras.optimizers.SGD(momentum=0.4), loss='mse', metrics=['mse', 'mae'])
 
 print(model.summary())
 train = int(input('train?'))
 if train:
-    history = model.fit(TrainGen, epochs=1, batch_size=1,
-              callbacks=[keras.callbacks.ReduceLROnPlateau(patience=1, factor=0.2, monitor="loss"),
-                                               keras.callbacks.EarlyStopping(patience=5, monitor="loss")])
+    history = model.fit(TrainGen, epochs=100, batch_size=1,
+              callbacks=[keras.callbacks.ReduceLROnPlateau(patience=2, factor=0.2, monitor="loss"),
+                                               keras.callbacks.EarlyStopping(patience=3, monitor="loss")])
 
     pd.DataFrame(history.history).plot(figsize=(12, 7))
     plt.grid(True)
